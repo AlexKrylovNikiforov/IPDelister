@@ -1,9 +1,10 @@
 name: macOS DMG build
+
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
+
 jobs:
   build-macos:
     runs-on: macos-14
@@ -16,13 +17,49 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Make build script executable
-        run: chmod +x build_macos.sh
+      - name: Build binary and DMG (inline)
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-      - name: Build app and DMG
-        run: ./build_macos.sh
+          APP_NAME="IPDelister"
+          ENTRY="main.py"
+          DMG_NAME="${APP_NAME}-macOS.dmg"
+          STAGE=".dmg-stage"
 
-      - name: Upload DMG artifact
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+          # onefile binary
+          pyinstaller "$ENTRY" --name "$APP_NAME" --onefile --noconfirm --clean
+          test -f "dist/${APP_NAME}"
+
+          # stage for DMG
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp "dist/${APP_NAME}" "$STAGE/"
+
+          # optional extras
+          [ -f "README.md" ] && cp "README.md" "$STAGE/README.md"
+          [ -f "ip.txt" ] && cp "ip.txt" "$STAGE/ip.example.txt"
+
+          # double‑click launcher for Finder
+          cat > "$STAGE/Run ${APP_NAME}.command" <<'EOF'
+          #!/bin/bash
+          set -e
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          "$DIR/IPDelister"
+          echo
+          read -n 1 -s -r -p "Press any key to close..."
+          EOF
+          chmod +x "$STAGE/Run ${APP_NAME}.command"
+
+          # DMG
+          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
+          rm -rf "$STAGE"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: IPDelister-macOS
