@@ -25,9 +25,10 @@ jobs:
           APP_NAME="IPDelister"
           ENTRY="main.py"
           DMG_NAME="${APP_NAME}-macOS.dmg"
-          STAGE=".dmg-stage"
+          STAGE_ROOT=".dmg-stage"
+          APP_DIR="$STAGE_ROOT/${APP_NAME}"
 
-          python -m pip install --upgrade pip wheel
+          python3 -m pip install --upgrade pip wheel
           pip install -r requirements.txt
           pip install pyinstaller
 
@@ -35,29 +36,35 @@ jobs:
           pyinstaller "$ENTRY" --name "$APP_NAME" --onefile --noconfirm --clean
           test -f "dist/${APP_NAME}"
 
-          # stage for DMG
-          rm -rf "$STAGE"
-          mkdir -p "$STAGE"
-          cp "dist/${APP_NAME}" "$STAGE/"
+          # stage: кладём всё в папку IPDelister/
+          rm -rf "$STAGE_ROOT"
+          mkdir -p "$APP_DIR"
+          cp "dist/${APP_NAME}" "$APP_DIR/${APP_NAME}"
 
-          # optional extras
-          [ -f "README.md" ] && cp "README.md" "$STAGE/README.md"
-          [ -f "ip.txt" ] && cp "ip.txt" "$STAGE/ip.example.txt"
-
-          # double‑click launcher for Finder
-          cat > "$STAGE/Run ${APP_NAME}.command" <<'EOF'
+          # ярлык-лаунчер рядом с бинарём
+          cat > "$APP_DIR/Run ${APP_NAME}.command" <<'EOF'
           #!/bin/bash
           set -e
           DIR="$(cd "$(dirname "$0")" && pwd)"
+          if [[ ! -x "$DIR/IPDelister" ]]; then
+            osascript -e 'display alert "IPDelister не найден" message "Положите Run IPDelister.command и IPDelister в одну папку."'
+            exit 1
+          fi
           "$DIR/IPDelister"
           echo
           read -n 1 -s -r -p "Press any key to close..."
           EOF
-          chmod +x "$STAGE/Run ${APP_NAME}.command"
+          chmod +x "$APP_DIR/Run ${APP_NAME}.command"
+          chmod +x "$APP_DIR/${APP_NAME}"
 
-          # DMG
-          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
-          rm -rf "$STAGE"
+          # опционально README и пример
+          [ -f "README.md" ] && cp "README.md" "$APP_DIR/README.md"
+          [ -f "ip.txt" ] && cp "ip.txt" "$APP_DIR/ip.example.txt"
+
+          # собираем DMG из корня .dmg-stage, где лежит папка IPDelister/
+          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DMG_NAME"
+
+          rm -rf "$STAGE_ROOT"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
