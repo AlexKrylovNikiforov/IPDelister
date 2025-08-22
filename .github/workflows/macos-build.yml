@@ -1,22 +1,18 @@
 name: macOS DMG build
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build-macos:
     runs-on: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Build binary and DMG (inline)
         shell: bash
         run: |
@@ -36,12 +32,12 @@ jobs:
           pyinstaller "$ENTRY" --name "$APP_NAME" --onefile --noconfirm --clean
           test -f "dist/${APP_NAME}"
 
-          # stage: кладём всё в папку IPDelister/
+          # stage: одна папка IPDelister/ внутри DMG
           rm -rf "$STAGE_ROOT"
           mkdir -p "$APP_DIR"
           cp "dist/${APP_NAME}" "$APP_DIR/${APP_NAME}"
 
-          # ярлык-лаунчер рядом с бинарём
+          # запускалка рядом с бинарём
           cat > "$APP_DIR/Run ${APP_NAME}.command" <<'EOF'
           #!/bin/bash
           set -e
@@ -61,11 +57,10 @@ jobs:
           [ -f "README.md" ] && cp "README.md" "$APP_DIR/README.md"
           [ -f "ip.txt" ] && cp "ip.txt" "$APP_DIR/ip.example.txt"
 
-          # собираем DMG из корня .dmg-stage, где лежит папка IPDelister/
+          # собираем DMG из корня .dmg-stage (внутри лежит папка IPDelister/)
           hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DMG_NAME"
 
           rm -rf "$STAGE_ROOT"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
