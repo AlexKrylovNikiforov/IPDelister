@@ -1,0 +1,117 @@
+name: Windows EXE + Installer
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE (PyInstaller onefile)
+        run: |
+          pyinstaller main.py --name IPDelister --onefile --noconfirm --clean
+          if not exist dist\IPDelister.exe ( exit 1 )
+
+      - name: Prepare NSIS input
+        shell: bash
+        run: |
+          mkdir -p _nsis
+          cp -f dist/IPDelister.exe _nsis/IPDelister.exe
+          [ -f README.md ] && cp -f README.md _nsis/README.md || true
+          [ -f ip.txt ] && cp -f ip.txt _nsis/ip.example.txt || true
+          cat > _nsis/installer.nsi <<'EOF'
+          !define APP_NAME "IPDelister"
+          !define APP_VERSION "1.0.0"
+          !define COMPANY "IPDelister"
+          !define INSTALL_DIR "$PROGRAMFILES64\${APP_NAME}"
+          !define STARTMENU_FOLDER "${APP_NAME}"
+          !include "MUI2.nsh"
+
+          Name "${APP_NAME}"
+          OutFile "IPDelister-Setup.exe"
+          InstallDir "${INSTALL_DIR}"
+          RequestExecutionLevel admin
+
+          !insertmacro MUI_PAGE_WELCOME
+          !insertmacro MUI_PAGE_DIRECTORY
+          !insertmacro MUI_PAGE_INSTFILES
+          !insertmacro MUI_PAGE_FINISH
+          !insertmacro MUI_LANGUAGE "English"
+          !insertmacro MUI_LANGUAGE "Russian"
+
+          Section "Install"
+            SetOutPath "${INSTALL_DIR}"
+            File "IPDelister.exe"
+            IfFileExists "$EXEDIR\README.md" 0 +2
+            File "README.md"
+            IfFileExists "$EXEDIR\ip.example.txt" 0 +2
+            File "ip.example.txt"
+
+            ; Рабочая директория пользователя (там будут отчёты)
+            CreateDirectory "$DOCUMENTS\IPDelister\reports"
+
+            ; Создаём деинсталлятор и регистрацию в "Приложения и возможности"
+            WriteUninstaller "$INSTDIR\Uninstall.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher"  "${COMPANY}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "InstallLocation" "$INSTDIR"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+
+            ; Ярлыки (рабочая папка ярлыков = Документы\IPDelister)
+            CreateDirectory "$SMPROGRAMS\${STARTMENU_FOLDER}"
+            CreateShortCut "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister.lnk" "${INSTALL_DIR}\IPDelister.exe" "" "" 0 "" "$DOCUMENTS\IPDelister"
+            CreateShortCut "$DESKTOP\IPDelister.lnk" "${INSTALL_DIR}\IPDelister.exe" "" "" 0 "" "$DOCUMENTS\IPDelister"
+
+            ; Доп. ярлык под Edge на случай, если Chrome не установлен
+            CreateShortCut "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister (Edge).lnk" "${INSTALL_DIR}\IPDelister.exe" "--browser edge" "" 0 "" "$DOCUMENTS\IPDelister"
+          SectionEnd
+
+          Section "Uninstall"
+            Delete "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister.lnk"
+            Delete "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister (Edge).lnk"
+            RMDir  "$SMPROGRAMS\${STARTMENU_FOLDER}"
+            Delete "$DESKTOP\IPDelister.lnk"
+
+            Delete "${INSTALL_DIR}\IPDelister.exe"
+            Delete "${INSTALL_DIR}\README.md"
+            Delete "${INSTALL_DIR}\ip.example.txt"
+            Delete "$INSTDIR\Uninstall.exe"
+            RMDir  "${INSTALL_DIR}"
+
+            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+          SectionEnd
+          EOF
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Make Installer (NSIS)
+        run: |
+          cd _nsis
+          makensis.exe installer.nsi
+          if not exist IPDelister-Setup.exe ( exit 1 )
+          cd ..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPDelister-Windows
+          path: |
+            dist/IPDelister.exe
+            _nsis/IPDelister-Setup.exe
