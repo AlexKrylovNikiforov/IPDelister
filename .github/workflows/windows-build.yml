@@ -1,4 +1,5 @@
 name: Windows EXE + Installer
+
 on:
   push:
     branches: [ main ]
@@ -7,6 +8,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +24,12 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      # ВАЖНО: этот шаг в cmd (fix ParserError)
       - name: Build EXE (PyInstaller onefile)
+        shell: cmd
         run: |
           pyinstaller main.py --name IPDelister --onefile --noconfirm --clean
-          if not exist dist\IPDelister.exe ( exit 1 )
+          if not exist dist\IPDelister.exe exit 1
 
       - name: Prepare NSIS input
         shell: bash
@@ -62,10 +66,10 @@ jobs:
             IfFileExists "$EXEDIR\ip.example.txt" 0 +2
             File "ip.example.txt"
 
-            ; Рабочая директория пользователя (там будут отчёты)
+            ; Рабочая директория пользователя для отчётов
             CreateDirectory "$DOCUMENTS\IPDelister\reports"
 
-            ; Создаём деинсталлятор и регистрацию в "Приложения и возможности"
+            ; Деинсталлятор и запись в реестр
             WriteUninstaller "$INSTDIR\Uninstall.exe"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher"  "${COMPANY}"
@@ -78,7 +82,7 @@ jobs:
             CreateShortCut "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister.lnk" "${INSTALL_DIR}\IPDelister.exe" "" "" 0 "" "$DOCUMENTS\IPDelister"
             CreateShortCut "$DESKTOP\IPDelister.lnk" "${INSTALL_DIR}\IPDelister.exe" "" "" 0 "" "$DOCUMENTS\IPDelister"
 
-            ; Доп. ярлык под Edge на случай, если Chrome не установлен
+            ; Доп. ярлык под Edge, если Chrome не установлен
             CreateShortCut "$SMPROGRAMS\${STARTMENU_FOLDER}\IPDelister (Edge).lnk" "${INSTALL_DIR}\IPDelister.exe" "--browser edge" "" 0 "" "$DOCUMENTS\IPDelister"
           SectionEnd
 
@@ -101,11 +105,13 @@ jobs:
       - name: Install NSIS
         run: choco install nsis -y
 
+      # ВАЖНО: этот шаг тоже в cmd
       - name: Make Installer (NSIS)
+        shell: cmd
         run: |
           cd _nsis
           makensis.exe installer.nsi
-          if not exist IPDelister-Setup.exe ( exit 1 )
+          if not exist IPDelister-Setup.exe exit 1
           cd ..
 
       - name: Upload artifacts
