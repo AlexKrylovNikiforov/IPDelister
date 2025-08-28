@@ -114,8 +114,8 @@ def run(
     results = []
     for ip in ip_list:
         console.print(f"→ Processing [bold]{ip}[/bold] ...", end=" ")
-        worker = BarracudaDelist(ip, headless=hless, timeout=tmo, browser=browser)
         try:
+            worker = BarracudaDelist(ip, headless=hless, timeout=tmo, browser=browser)
             worker.connect()
             worker.set_data(email=email, phone=phone, reason=reason or "")
             worker.submit()

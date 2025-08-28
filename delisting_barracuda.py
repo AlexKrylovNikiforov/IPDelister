@@ -5,6 +5,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.firefox.service import Service as FFService
+from selenium.webdriver.edge.service import Service as EdgeService
 import os
 
 def _evict_driver_from_path(exe_name: str) -> None:
@@ -42,22 +45,28 @@ def build_driver(browser: Browser, headless: bool):
         opts = FirefoxOptions()
         if headless:
             opts.add_argument("-headless")
-        return webdriver.Firefox(options=opts)
+        service = FFService(log_output=os.devnull)  # для новых selenium
+        return webdriver.Firefox(options=opts, service=service)
 
     if browser == Browser.chrome:
-        _evict_driver_from_path("chromedriver")  # <— игнорируем старый драйвер из PATH
+        _evict_driver_from_path("chromedriver")
         from selenium.webdriver.chrome.options import Options as ChromeOptions
         opts = ChromeOptions()
         if headless:
             opts.add_argument("--headless=new")
-        return webdriver.Chrome(options=opts)
+        # тише логи Chromium/Driver
+        opts.add_argument("--disable-logging")
+        opts.add_argument("--log-level=3")
+        service = ChromeService(log_path=os.devnull)
+        return webdriver.Chrome(options=opts, service=service)
 
     if browser == Browser.edge:
         from selenium.webdriver.edge.options import Options as EdgeOptions
         opts = EdgeOptions()
         if headless:
             opts.add_argument("--headless=new")
-        return webdriver.Edge(options=opts)
+        service = EdgeService(log_path=os.devnull)
+        return webdriver.Edge(options=opts, service=service)
 
     raise ValueError(f"Unsupported browser: {browser}")
 
